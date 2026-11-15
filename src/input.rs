@@ -165,7 +165,13 @@ pub fn parse_line(line: &[u8]) -> Result<ParsedLine, SeqError> {
         return Err(SeqError::Blank);
     }
     let first_end = scan_field(line, 0).ok_or(SeqError::Malformed)?;
-    let seq = parse_seq(decode(&line[..first_end]).get(0).unwrap_or_default())?;
+    let first = &line[..first_end];
+    // An unquoted field's value is its own bytes, so only a quoted one goes
+    // through `decode`, which would strip a leading UTF-8 BOM.
+    let seq = match first.first() {
+        Some(b'"') => parse_seq(decode(first).get(0).unwrap_or_default()),
+        _ => parse_seq(first),
+    }?;
     let result = if rest_is_well_formed(line, first_end) {
         parse_fields(&decode(line))
     } else {
@@ -272,6 +278,10 @@ fn rest_is_well_formed(line: &[u8], mut end: usize) -> bool {
 }
 
 /// Decodes a line whose quote shape is already valid.
+///
+/// The `csv` reader silently strips a UTF-8 BOM at the start of its input,
+/// so `line` must start with a quote or with a sequence number already
+/// checked to be digits.
 fn decode(line: &[u8]) -> csv::ByteRecord {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)

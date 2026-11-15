@@ -368,6 +368,23 @@ fn unrecoverable_seq_is_terminal() {
     assert_eq!(line("１,cancel,a1,,,,,".as_bytes()), Err(SeqError::Syntax));
 }
 
+// exkg-verifies: fea-ky6m7m#ac-identity
+#[test]
+fn a_bom_before_a_command_line_is_not_stripped() {
+    let cases: [&[u8]; 5] = [
+        b"\xEF\xBB\xBF1,cancel,a1,,,,,",
+        b"\xEF\xBB\xBF,cancel,a1,,,,,",
+        b"\xEF\xBB\xBF",
+        b"\xEF\xBB\xBF\xEF\xBB\xBF1,cancel,a1,,,,,",
+        b"\"\xEF\xBB\xBF1\",cancel,a1,,,,,",
+    ];
+    for text in cases {
+        assert_eq!(line(text), Err(SeqError::Syntax), "{}", text.escape_ascii());
+    }
+    let input = format!("{HEADER}\u{feff}1,cancel,a1,,,,,\n2,cancel,a1,,,,,\n");
+    assert_eq!(all(input.as_bytes())[0], Err(SeqError::Syntax));
+}
+
 // exkg-verifies: fea-ky6m7m#ac-input
 #[test]
 fn an_unclosed_quote_never_swallows_the_next_line() {

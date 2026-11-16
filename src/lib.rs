@@ -1,7 +1,11 @@
 //! A deterministic order book for one market.
 //!
-//! This slice provides the input layer: typed commands with bounded values
-//! ([`domain`]) and a strict, line-at-a-time CSV parser ([`input`]).
+//! Typed commands with bounded values ([`domain`]) come from a strict,
+//! line-at-a-time CSV parser ([`input`]). The [`engine`] checks sequence
+//! numbers and IDs, matches orders and reports typed [`event`]s. Parsing and
+//! matching stay separate: the engine consumes the parser's results.
 
 pub mod domain;
+pub mod engine;
+pub mod event;
 pub mod input;

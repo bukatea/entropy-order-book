@@ -15,6 +15,15 @@ Run: `cargo run --locked -- tests/fixtures/sample.csv` and `cargo run --locked -
 
 The toolchain is pinned to Rust 1.99.1 in `rust-toolchain.toml` and `Cargo.lock` is committed.
 
+Run one test file with `cargo test --locked --test <name>`:
+
+- `domain`, `input`, `engine`, `canonical`: hand-written rule scenarios, byte goldens and digest fixtures.
+- `cli`: runs the compiled binary in separate processes against the committed goldens.
+- `model`: `proptest` histories checked against a slow, independent sorted-list reference model in `tests/model/reference.rs`. Events and complete state are compared after every line, with book, priority and quantity-conservation invariants. Failing cases shrink, and proptest saves them to `tests/model.proptest-regressions`.
+- `replication`: a test-only simulation of nodes with provisional gossip views. Each node replays canonical blocks from a committed baseline and checks for corrupted state against a trusted digest.
+
+`.github/workflows/ci.yml` runs formatting, Clippy and debug and release tests on `ubuntu-24.04` (x86-64) and `macos-15` (arm64). It starts only on a pull request or a manual dispatch. It has not been run yet, so no cross-machine result is claimed.
+
 ## Input format
 
 - Header is exactly `seq,cmd,id,owner,side,price,size,tif` (LF or CRLF; no BOM, trimming or reordering). Empty input or any other header is terminal.

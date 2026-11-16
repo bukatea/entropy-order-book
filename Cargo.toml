@@ -13,3 +13,6 @@ csv = "1"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["std"] }

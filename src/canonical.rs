@@ -201,7 +201,7 @@ fn write_event_fields<W: Write + ?Sized>(out: &mut W, event: &Event) -> io::Resu
     }
 }
 
-/// Writes one `order` record of the state, without its LF.
+/// Writes one LF-terminated `order` record of the state.
 fn write_order<W: Write + ?Sized>(out: &mut W, order: &RestingOrder) -> io::Result<()> {
     out.write_all(b"order,")?;
     write_text(out, order.id.as_bytes())?;

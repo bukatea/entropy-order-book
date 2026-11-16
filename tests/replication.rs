@@ -94,27 +94,34 @@ impl Node {
         (self.speculative, self.provisional_log) = run(&self.committed, &self.pending);
     }
 
-    /// Commits a block from the committed baseline, never from speculation.
+    /// Commits a block, then rebuilds speculation once.
     fn on_block(&mut self, block: &Block) {
+        self.commit(block);
+        self.speculate();
+    }
+
+    /// Replaces committed state with a known-good baseline plus canonical
+    /// blocks. Pending gossip is kept, and speculation is rebuilt once at the
+    /// end, even with no blocks, so none of it rests on the replaced state.
+    fn resync(&mut self, baseline: &Engine, height: u64, blocks: &[Block]) {
+        self.committed = baseline.clone();
+        self.committed_height = height;
+        self.committed_log = Vec::new();
+        for block in blocks {
+            self.commit(block);
+        }
+        self.speculate();
+    }
+
+    /// Applies a block to the committed baseline, never to speculation, and
+    /// drops its messages from the pending set by identity.
+    fn commit(&mut self, block: &Block) {
         assert_eq!(block.height, self.committed_height + 1);
         assert_eq!(block.rules_version, RULES_VERSION);
         (self.committed, self.committed_log) = run(&self.committed, &block.msgs);
         self.committed_height = block.height;
         self.pending
             .retain(|p| !block.msgs.iter().any(|m| m.msg_id == p.msg_id));
-        self.speculate();
-    }
-
-    /// Replaces committed state with a known-good baseline plus canonical
-    /// blocks. Pending gossip is kept and speculation rebuilt.
-    fn resync(&mut self, baseline: &Engine, height: u64, blocks: &[Block]) {
-        self.committed = baseline.clone();
-        self.committed_height = height;
-        self.committed_log = Vec::new();
-        for block in blocks {
-            self.on_block(block);
-        }
-        self.speculate();
     }
 
     fn commitment(&self) -> Commitment {
@@ -567,6 +574,128 @@ fn equal_depth_corruption_is_detected_and_rebuilt_from_the_baseline() {
         encode_state(&honest.committed)
     );
     assert_eq!(bad.committed, honest.committed);
+}
+
+// exkg-verifies: fea-ky6m7m#ac-replication
+#[test]
+fn empty_recovery_rebuilds_pending_speculation_on_the_restored_baseline() {
+    let good_base = baseline();
+    // Built independently: a1 rests one tick higher, so bob's bid cannot cross.
+    let (bad_base, _) = replay(format!("{HEADER}1,place,a1,alice,sell,101.00,5,GTC\n").as_bytes());
+    let mut node = Node::new(&bad_base, BASELINE_HEIGHT);
+    node.gossip(BUY_PART);
+    assert_eq!(settled(&node.provisional_events(), "a1"), (0, 0));
+
+    node.resync(&good_base, BASELINE_HEIGHT, &[]);
+
+    assert_eq!(node.commitment().height, BASELINE_HEIGHT);
+    assert_eq!(node.committed, good_base);
+    assert!(node.committed_events().is_empty());
+    assert_eq!(node.pending, [BUY_PART]);
+    // The stale resting bid is replaced by a fill against the restored a1.
+    assert_eq!(
+        node.provisional_events(),
+        [
+            accepted_b1(2, 2),
+            Event::Trade {
+                seq: 2,
+                taker: id("b1"),
+                maker: id("a1"),
+                price: price(10000),
+                quantity: qty(2),
+                taker_left: 0,
+                maker_left: 3,
+            },
+        ]
+    );
+    assert_eq!(
+        encode_state(&node.speculative),
+        b"eob-state,1\nnext_seq,3\nhalted,none\npriority_clock,1\n\
+          bids,0\nasks,1\norder,a1,alice,sell,10000,3,GTC,1\n\
+          ids,2\nid,a1\nid,b1\n"
+    );
+}
+
+// exkg-verifies: fea-ky6m7m#ac-replication
+#[test]
+fn multi_block_recovery_drops_included_messages_and_respeculates_the_rest() {
+    let bid_c1 = Msg {
+        msg_id: "m-c1",
+        body: "place,c1,carol,buy,90.00,1,GTC",
+    };
+    let ask_z1 = Msg {
+        msg_id: "m-z1",
+        body: "place,z1,zed,sell,120.00,1,GTC",
+    };
+    let good_base = baseline();
+    let (bad_base, _) =
+        replay(format!("{HEADER}1,place,a1,mallory,sell,100.00,5,GTC\n").as_bytes());
+    let mut node = Node::new(&bad_base, BASELINE_HEIGHT);
+    node.gossip(CANCEL_A1);
+    node.gossip(bid_c1);
+    node.gossip(BUY_PART);
+    assert_eq!(node.provisional_seq("m-c1"), Some(3));
+
+    let blocks = [
+        block(&[BUY_PART]),
+        // Includes a message this node never saw.
+        Block {
+            height: BASELINE_HEIGHT + 2,
+            rules_version: RULES_VERSION,
+            msgs: vec![ask_z1, CANCEL_A1],
+        },
+    ];
+    node.resync(&good_base, BASELINE_HEIGHT, &blocks);
+
+    assert_eq!(node.commitment().height, BASELINE_HEIGHT + 2);
+    // The committed log holds the last block, at canonical positions.
+    assert_eq!(node.committed_seq("m-z1"), Some(3));
+    assert_eq!(node.committed_seq("m-cancel"), Some(4));
+    assert_eq!(
+        node.committed_events(),
+        [
+            Event::Accepted {
+                seq: 3,
+                id: id("z1"),
+                owner: owner("zed"),
+                side: Side::Sell,
+                price: price(12000),
+                size: qty(1),
+                tif: TimeInForce::Gtc,
+            },
+            Event::Rested {
+                seq: 3,
+                id: id("z1"),
+                side: Side::Sell,
+                price: price(12000),
+                remaining: qty(1),
+                rank: 2,
+            },
+            Event::Cancelled {
+                seq: 4,
+                id: id("a1"),
+                remaining: qty(3),
+                reason: CancelReason::User,
+            },
+        ]
+    );
+    assert_eq!(
+        encode_state(&node.committed),
+        b"eob-state,1\nnext_seq,5\nhalted,none\npriority_clock,2\n\
+          bids,0\nasks,1\norder,z1,zed,sell,12000,1,GTC,2\n\
+          ids,3\nid,a1\nid,b1\nid,z1\n"
+    );
+
+    // Both included messages left by identity; c1 moved to a fresh position.
+    assert_eq!(node.pending, [bid_c1]);
+    assert_eq!(node.provisional_seq("m-c1"), Some(5));
+    assert_eq!(
+        encode_state(&node.speculative),
+        b"eob-state,1\nnext_seq,6\nhalted,none\npriority_clock,3\n\
+          bids,1\norder,c1,carol,buy,9000,1,GTC,3\n\
+          asks,1\norder,z1,zed,sell,12000,1,GTC,2\n\
+          ids,4\nid,a1\nid,b1\nid,c1\nid,z1\n"
+    );
 }
 
 // exkg-verifies: fea-ky6m7m#ac-replication

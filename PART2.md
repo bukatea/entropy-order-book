@@ -1,50 +1,55 @@
 # Part 2: Replication
 
-Assume the nodes agree on which block is canonical. Keep the last committed
-book separate from the speculative book built from gossip.
+I assume the canonical block is already agreed; choosing it is outside the
+matching engine.
 
 ## 1. When the canonical block arrives
 
-Discard local speculation and replay the block's commands, in order, from
-the committed book. The block supplies any commands missed through gossip.
-Replace provisional trade and cancellation notifications with these results;
-never settle a provisional fill.
+Deterministic replay needs the same starting state and command order.
+Gossip gives neither, so I wouldn't apply the canonical block on top of
+local speculation.
 
-Remove included commands from the pending set by message ID, not local
-sequence position. Replay the remaining commands on the new committed state
-with fresh positions. Some may now reject. Gossip arrival positions are not
-canonical sequence numbers.
+I'd keep a committed book and speculate on a copy. When the block arrives,
+I'd discard the copy and replay the block's commands from committed state,
+including anything missed through gossip. For this scope, replaying is easier
+to check than undoing trades whose effects may have influenced later commands.
+I'd show early fills as provisional because the block may change them.
+Settlement would wait for the canonical result.
+
+Arrival positions differ between nodes, so I'd remove included commands by
+message ID and retry the rest with fresh sequence positions. A pending
+cancel might now fail because the block already filled its order.
 
 ## 2. Cancel versus fill
 
-Alice has a resting sell for five lots. Node A sees her cancel before Bob's
-crossing buy; node B sees the buy first. Each applies both commands locally,
-so Alice can see different provisional results.
+Alice's five-lot sell rests in the book. Node A sees her cancel first;
+node B sees Bob's crossing buy first. Each applies both in that local
+order, so A reports a cancellation while B reports a fill.
 
-- **Cancel first in the block:** five lots cancel. Bob cannot fill Alice's
-  order; B withdraws its provisional fill.
-- **Five-lot buy first:** all five lots fill, then the cancel rejects because
-  the order is closed. A replaces its provisional cancellation with the fill.
-- **Two-lot buy first:** two lots fill and the cancel removes the three left.
-  B already shows that partial fill and cancellation; A corrects its earlier
-  five-lot cancellation.
+- **Cancel first in the block:** Alice's order has gone before Bob can
+  match it. B withdraws its fill notice.
+- **Five-lot buy first:** Alice fills completely, leaving nothing to cancel.
+  The cancel therefore rejects, and A corrects its earlier cancellation.
+- **Two-lot buy first:** two of Alice's five lots trade, leaving three.
+  The cancel removes those three. B already showed that result, while A
+  corrects its earlier five-lot cancellation.
 
-Both nodes replay commands, not fill events. Alice gets one final outcome.
+Both replay from the same committed book, so they report the same confirmed
+result to Alice.
 
 ## 3. Detecting and repairing divergence
 
-At each canonical block, compare the full-state digest and a canonical-event
-hash against a trusted commitment in the agreed block record or validator
-attestations. Bind the comparison to the block identity and rules/encoding
-version. The engine supplies the state digest; the event hash belongs to the
-proposed replication layer.
+Visible depth isn't enough: owners, FIFO order, the sequence cursor and
+reserved IDs affect the next command. I'd compare full-state BLAKE3 digests
+against an agreed block commitment or validator attestations. They must refer
+to the same block and rules/encoding version; otherwise legitimate differences
+would look like faults. I'd also hash canonical events, since different fills
+can leave the same final state. The engine provides the state digest; the
+event hash would belong to replication.
 
-Compare committed states, not speculative tips. Owners, FIFO order, the
-sequence cursor and reserved IDs matter even when visible depth matches.
-A peer's hash alone cannot tell which node is right.
-
-On a mismatch, stop serving authoritative results and, if applicable, voting.
-Preserve the state and log for diagnosis. Check the software version, restore
-an authenticated known-good checkpoint and replay canonical blocks. Rejoin
-only after the hashes match. If replay still disagrees, keep the node out of
-service until the cause is fixed.
+A mismatch proves disagreement, not which peer is right. I'd stop the node
+serving authoritative results and, if it is a validator, voting. I'd keep
+its state and log so the fault can be diagnosed, check its version, then
+restore an authenticated known-good checkpoint rather than blindly copy a
+peer. It could rejoin only after replaying canonical blocks and matching
+the expected hashes; otherwise it stays out for diagnosis.

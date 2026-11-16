@@ -66,6 +66,9 @@ cargo fmt --check
 - **Sequence.** The expected seq is checked first. A gap (`seq_gap`), a lower number such as a duplicate, zero or reversal (`seq_stale`), an unrecoverable seq or a header failure halts without applying the line or any later line. A valid expected seq is consumed even when the row is rejected. After `u64::MAX` the cursor is `exhausted` and any further line halts.
 - **Invalid rows.** A row with the expected seq that fails parsing is rejected with command `input`, an empty ID and a parser reason such as `invalid_price_off_tick`. It consumes its seq and reserves nothing.
 - **IDs.** A place with all fields valid reserves its ID before business checks, even if it is then rejected as a crossing POST_ONLY. A malformed place reserves nothing. Reusing a reserved ID rejects as `duplicate_id` and leaves any live original alone. Cancel and modify reject a never-reserved ID as `unknown_order` and a reserved ID with no live order as `order_closed`.
+
+A rejected command can leave the live book unchanged while still advancing the sequence or reserving an ID. Those changes affect what later commands can do, so they are included in the state digest.
+
 - **Matching.** Best price, then oldest rank. Each fill is the smaller of the two remaining quantities, at the maker's price. A partially filled maker keeps its rank. A filled maker leaves the book and the ID index; its ID stays reserved.
 - **Time in force.** GTC rests its remainder. IOC cancels it (`ioc_remainder`; a zero remainder emits nothing). POST_ONLY rejects as a whole (`post_only_would_cross`) if it would cross the best opposite order, checked before self-trade prevention.
 - **Self-trade prevention.** An incoming order that meets a resting order of the same owner cancels that resting order (`self_trade`) and keeps matching. Earlier fills stand; there are no self-fills.
@@ -117,6 +120,8 @@ id,<id>
 - Each count line is followed by exactly that many `order` or `id` records, possibly none, so an empty bid side is `bids,0` directly followed by `asks,<count>`.
 - Bids and asks are in execution priority. Reserved IDs, including closed orders and business-rejected places, are sorted by original bytes, not escaped text. Lookup indexes are excluded.
 - The digest is unkeyed BLAKE3, 32 bytes as 64 lowercase hex, of exactly these state bytes. It commits to state, not event history, so a rejected place that reserves an ID changes the digest while the book looks unchanged.
+
+State export and `digest()` use the same encoder, so `--state` exposes exactly the bytes being hashed. Keeping one encoder avoids maintaining two versions of the state format.
 
 ## Command line
 

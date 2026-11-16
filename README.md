@@ -1,6 +1,6 @@
 # entropy-order-book
 
-A deterministic single-market limit order book in Rust, as the `orderbook` library and command-line program. It replays a sequenced CSV log of place, cancel and modify commands with price-time priority, self-trade prevention and GTC/IOC/POST_ONLY orders, and writes a canonical event stream and a BLAKE3 digest of the final state. The same log gives the same bytes on every run and build profile.
+A deterministic single-market limit order book in Rust. The `orderbook` library applies a sequenced CSV log; the CLI prints its events and a BLAKE3 digest of the final state.
 
 Part 2 is in [PART2.md](PART2.md).
 
@@ -151,7 +151,7 @@ println!("{} events, digest {}", events.len(), engine.digest());
 
 ## AI tools
 
-Claude and GPT models assisted extensively with implementation, tests, review and documentation, and those tools ran the checks described here. For example, a review found that the `csv` library silently strips a leading BOM, and the parser was changed so it cannot reach that path. The sample state bytes and digest were checked with the official `b3sum`. Separate review passes covered sequence handling, FIFO priority, self-trade prevention, modify atomicity, encoding and failing writes.
+Claude and GPT helped write the code, tests and docs, and review the results. Review caught the CSV reader stripping a leading BOM; the parser was changed to reject it. The sample state and digest were checked separately with the official `b3sum`.
 
 ## What I'd do next
 

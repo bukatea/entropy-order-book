@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
+blake3 = "1"
 csv = "1"
 
 [lints.rust]

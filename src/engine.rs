@@ -635,4 +635,33 @@ mod tests {
             }])
         );
     }
+
+    // exkg-verifies: fea-ky6m7m#ac-digest
+    #[test]
+    fn exhausted_cursor_is_encoded_as_exhausted() {
+        let mut e = at_max();
+        e.apply(parse_line(
+            b"18446744073709551615,place,a1,o1,buy,1.00,1,GTC",
+        ))
+        .unwrap();
+        let mut state = Vec::new();
+        e.write_state(&mut state).unwrap();
+        assert_eq!(
+            state,
+            b"eob-state,1\nnext_seq,exhausted\nhalted,none\npriority_clock,1\nbids,1\norder,a1,o1,buy,100,1,GTC,1\nasks,0\nids,1\nid,a1\n"
+        );
+    }
+
+    // exkg-verifies: fea-ky6m7m#ac-digest
+    #[test]
+    fn halted_state_names_its_halt_reason() {
+        let mut e = Engine::new();
+        e.apply(parse_line(b"2,cancel,a1,,,,,")).unwrap();
+        let mut state = Vec::new();
+        e.write_state(&mut state).unwrap();
+        assert_eq!(
+            state,
+            b"eob-state,1\nnext_seq,1\nhalted,seq_gap\npriority_clock,0\nbids,0\nasks,0\nids,0\n"
+        );
+    }
 }

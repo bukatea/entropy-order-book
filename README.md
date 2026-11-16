@@ -188,8 +188,8 @@ id,<id>
 - `tests/canonical.rs` has fixed byte and digest goldens, including `empty.state` and `empty.blake3`.
 - The sample digest was computed from the literal state bytes by an independent BLAKE3 implementation checked against the 35 official test vectors, and was also checked with the official `b3sum`. The sample events are hand-derived.
 - The model test's reference engine (`tests/model/reference.rs`) keeps live orders in one unsorted `Vec` and finds the best maker by linear scan. It shares only vocabulary with production: the domain types, the parser's `ParsedLine`, the typed `Event` enums, and the shared `canonical::write_event` for comparison. It never uses the engine's matching, index, rank or sequence code, and reads `Engine` only through its public views. Because both event streams go through the same encoder, encoder correctness is checked separately by the hand-derived byte goldens in `tests/canonical.rs`.
-- The suite passes in debug and release (`cargo test --locked`, `cargo test --release --locked`), and the model agrees with the engine on generated histories. All of this ran locally on Linux x86-64 only.
-- `.github/workflows/ci.yml` defines the same formatting, Clippy and debug and release test checks for `ubuntu-24.04` (x86-64) and `macos-15` (arm64), triggered only by a pull request or manual dispatch. It has not been run, so no macOS or cross-machine result is claimed.
+- The suite passes in debug and release (`cargo test --locked`, `cargo test --release --locked`), and the model agrees with the engine on generated histories. Those local runs were on Linux x86-64 only.
+- `.github/workflows/ci.yml` runs the same formatting, Clippy and debug and release test checks on `ubuntu-24.04` (x86-64) and `macos-15` (arm64), triggered only by a pull request or manual dispatch. [Run 43850486173](https://github.com/bukatea/entropy-order-book/actions/runs/43850486173) passed on both machines at commit `a89fe8f` (rustc 1.99.1): Linux reported host `x86_64-unknown-linux-gnu` and macOS reported `aarch64-apple-darwin`. Each job passed all four checks against the same committed event, state and digest goldens, with no platform-specific rebaselining. That run tested `a89fe8f`, not any later commit, and it exercised the in-process engine and separate CLI processes, not network replication. The evidence covers those two machines and that toolchain only.
 
 ## AI tools
 
@@ -201,6 +201,5 @@ Claude and GPT models assisted extensively with implementation, tests, review an
 
 ## What I'd do next
 
-- Run the same goldens on actual macOS arm64 hardware.
 - Profile before optimizing, and set measured limits on event-log and ID-history memory for untrusted, long-running use.
 - For production replication, agree on finality, authenticated checkpoints and durable logs; cloning `Engine` is not enough.

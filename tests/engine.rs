@@ -726,7 +726,7 @@ fn brief_sample_matches_hand_analysis() {
         "1,place,a1,Alice,buy,100.25,5,GTC",
         "2,place,b1,Bob,sell,100.50,3,GTC",
         "3,place,b2,Bob,sell,100.25,2,IOC",
-        "4,place,b3,Bob,sell,100.25,1,POST_ONLY",
+        "4,place,b3,Carol,sell,100.25,1,POST_ONLY",
         "5,modify,b1,,,100.40,2,",
         "6,place,a2,Alice,sell,100.25,1,GTC",
         "7,cancel,a1,,,,,",

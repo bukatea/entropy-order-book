@@ -1,0 +1,8 @@
+seq,cmd,id,owner,side,price,size,tif
+1,place,a1,alice,buy,100.25,5,GTC
+2,place,b1,bob,sell,100.50,3,GTC
+3,place,b2,bob,sell,100.25,2,IOC
+4,place,b3,carol,sell,100.25,1,POST_ONLY
+5,modify,b1,,,100.40,2,
+6,place,a2,alice,sell,100.25,1,GTC
+7,cancel,a1,,,,,

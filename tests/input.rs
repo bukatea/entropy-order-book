@@ -3,7 +3,7 @@ use orderbook::domain::{
 };
 use orderbook::input::{
     Field, HeaderError, ParsedLine, PhysicalLines, RejectReason, SeqError, commands, parse_header,
-    parse_line,
+    parse_line, read_physical_line,
 };
 
 const HEADER: &str = "seq,cmd,id,owner,side,price,size,tif\n";
@@ -521,4 +521,30 @@ fn errors_display_fixed_text_without_input() {
         "sequence number is too large"
     );
     assert_eq!(HeaderError::Mismatch.to_string(), "header does not match");
+}
+
+// exkg-verifies: fea-ky6m7m#ac-input
+#[test]
+fn read_physical_line_frames_like_physical_lines() {
+    let inputs: [&[u8]; 9] = [
+        b"",
+        b"\n",
+        b"a",
+        b"a\n",
+        b"a\r\n",
+        b"a\r",
+        b"\r\n\r\n",
+        b"x\ny\r\nz",
+        b"a\rb\n",
+    ];
+    for input in inputs {
+        let expected: Vec<Vec<u8>> = PhysicalLines::new(input).map(<[u8]>::to_vec).collect();
+        let mut reader = input;
+        let mut buf = Vec::new();
+        let mut actual = Vec::new();
+        while let Some(line) = read_physical_line(&mut reader, &mut buf).unwrap() {
+            actual.push(line.to_vec());
+        }
+        assert_eq!(actual, expected, "input {input:?}");
+    }
 }

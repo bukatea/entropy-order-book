@@ -5,6 +5,7 @@
 //! numbers and IDs, matches orders and reports typed [`event`]s. Parsing and
 //! matching stay separate: the engine consumes the parser's results.
 
+pub mod canonical;
 pub mod domain;
 pub mod engine;
 pub mod event;

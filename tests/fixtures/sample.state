@@ -1,0 +1,14 @@
+eob-state,1
+next_seq,8
+halted,none
+priority_clock,4
+bids,0
+asks,2
+order,a2,alice,sell,10025,1,GTC,4
+order,b1,bob,sell,10040,2,GTC,3
+ids,5
+id,a1
+id,a2
+id,b1
+id,b2
+id,b3

@@ -237,6 +237,28 @@ impl<'a> Iterator for PhysicalLines<'a> {
     }
 }
 
+/// Reads the next physical line from `reader` into `buf`, framed exactly as
+/// [`PhysicalLines`] frames a slice.
+///
+/// `buf` is cleared first. The returned line has no LF or CRLF terminator; an
+/// unterminated final line is returned as is. Returns `None` at end of input.
+pub fn read_physical_line<'b, R: std::io::BufRead + ?Sized>(
+    reader: &mut R,
+    buf: &'b mut Vec<u8>,
+) -> std::io::Result<Option<&'b [u8]>> {
+    buf.clear();
+    if reader.read_until(b'\n', buf)? == 0 {
+        return Ok(None);
+    }
+    if buf.last() == Some(&b'\n') {
+        buf.pop();
+        if buf.last() == Some(&b'\r') {
+            buf.pop();
+        }
+    }
+    Ok(Some(buf.as_slice()))
+}
+
 /// Returns the end of the field starting at `start` if its shape is valid.
 ///
 /// A quote may only open a field; inside it, a doubled quote is a quote and
